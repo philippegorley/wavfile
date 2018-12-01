@@ -5,6 +5,12 @@
 #include <limits>
 #include <memory>
 
+#ifdef WF_AVFRAME
+extern "C" {
+#include <libavutil/channel_layout.h>
+}
+#endif
+
 template<typename T>
 T get_sample(float t)
 {
@@ -59,6 +65,42 @@ void test_vector_vector(std::string filename, int channels, int rate)
     wav->write(v);
 }
 
+#ifdef WF_AVFRAME
+template<typename T>
+void test_frame(std::string filename, int channels, int rate, bool planar)
+{
+    auto wav = std::unique_ptr<wav::WavFile<T>>(new wav::WavFile<T>(filename, channels, rate));
+    AVFrame *frame = av_frame_alloc();
+    AVSampleFormat format;
+    if (std::is_same<T, uint8_t>::value)
+        format = AV_SAMPLE_FMT_U8;
+    else if (std::is_same<T, int16_t>::value)
+        format = AV_SAMPLE_FMT_S16;
+    else if (std::is_same<T, int32_t>::value)
+        format = AV_SAMPLE_FMT_S32;
+    else if (std::is_same<T, int64_t>::value)
+        format = AV_SAMPLE_FMT_S64;
+    else if (std::is_same<T, float>::value)
+        format = AV_SAMPLE_FMT_FLT;
+    else if (std::is_same<T, double>::value)
+        format = AV_SAMPLE_FMT_DBL;
+    if (planar)
+        format = av_get_planar_sample_fmt(format);
+    for (int i = 0; i < 50; ++i) {
+        frame->format = format;
+        frame->channels = channels;
+        frame->channel_layout = av_get_default_channel_layout(channels);
+        frame->sample_rate = rate;
+        frame->nb_samples = rate / 50;
+        av_frame_get_buffer(frame, 0);
+        av_samples_set_silence(frame->extended_data, 0, frame->nb_samples, channels, format);
+        wav->write(frame);
+        av_frame_unref(frame);
+    }
+    av_frame_free(&frame);
+}
+#endif
+
 int main(int argc, char *argv[])
 {
     if (argc != 2) {
@@ -90,6 +132,22 @@ int main(int argc, char *argv[])
     test_vector_vector<int64_t>(output_dir + "vvs64.wav", channels, sampling_rate);
     test_vector_vector<float>(output_dir + "vvf32.wav", channels, sampling_rate);
     test_vector_vector<double>(output_dir + "vvf64.wav", channels, sampling_rate);
+
+#ifdef WF_AVFRAME
+    test_frame<uint8_t>(output_dir + "fu8.wav", channels, sampling_rate, false);
+    test_frame<int16_t>(output_dir + "fs16.wav", channels, sampling_rate, false);
+    test_frame<int32_t>(output_dir + "fs32.wav", channels, sampling_rate, false);
+    test_frame<int64_t>(output_dir + "fs64.wav", channels, sampling_rate, false);
+    test_frame<float>(output_dir + "ff32.wav", channels, sampling_rate, false);
+    test_frame<double>(output_dir + "ff64.wav", channels, sampling_rate, false);
+
+    test_frame<uint8_t>(output_dir + "fu8p.wav", channels, sampling_rate, true);
+    test_frame<int16_t>(output_dir + "fs16p.wav", channels, sampling_rate, true);
+    test_frame<int32_t>(output_dir + "fs32p.wav", channels, sampling_rate, true);
+    test_frame<int64_t>(output_dir + "fs64p.wav", channels, sampling_rate, true);
+    test_frame<float>(output_dir + "ff32p.wav", channels, sampling_rate, true);
+    test_frame<double>(output_dir + "ff64p.wav", channels, sampling_rate, true);
+#endif
 
     return 0;
 }

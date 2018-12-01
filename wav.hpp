@@ -4,6 +4,13 @@
 #include <type_traits>
 #include <vector>
 
+#ifdef WF_AVFRAME
+extern "C" {
+#include <libavutil/avutil.h>
+#include <libavutil/frame.h>
+}
+#endif
+
 namespace wav {
 
 template<typename SampleFormat>
@@ -87,6 +94,48 @@ public:
             for (int c = 0; c < samples.size(); ++c)
                 write(samples[c][i], sizePerSample);
     }
+
+#ifdef WF_AVFRAME
+    void write(AVFrame *frame)
+    {
+        auto format = static_cast<AVSampleFormat>(frame->format);
+        int width = av_get_bytes_per_sample(format);
+        int planar = av_sample_fmt_is_planar(format);
+        int step = planar ? width : width * frame->channels;
+        for (int c = 0; c < frame->channels; ++c) {
+            int offset = planar ? 0 : width * c;
+            for (int i = 0; i < frame->nb_samples; ++i) {
+                uint8_t *p = &frame->extended_data[planar ? c : 0][i + offset];
+                switch (format) {
+                case AV_SAMPLE_FMT_U8:
+                case AV_SAMPLE_FMT_U8P:
+                    write<uint8_t>(*(uint8_t*)p);
+                    break;
+                case AV_SAMPLE_FMT_S16:
+                case AV_SAMPLE_FMT_S16P:
+                    write<int16_t>(*(int16_t*)p);
+                    break;
+                case AV_SAMPLE_FMT_S32:
+                case AV_SAMPLE_FMT_S32P:
+                    write<int32_t>(*(int32_t*)p);
+                    break;
+                case AV_SAMPLE_FMT_S64:
+                case AV_SAMPLE_FMT_S64P:
+                    write<int64_t>(*(int64_t*)p);
+                    break;
+                case AV_SAMPLE_FMT_FLT:
+                case AV_SAMPLE_FMT_FLTP:
+                    write<float>(*(float*)p);
+                    break;
+                case AV_SAMPLE_FMT_DBL:
+                case AV_SAMPLE_FMT_DBLP:
+                    write<double>(*(double*)p);
+                    break;
+                }
+            }
+        }
+    }
+#endif
 };
 
 }
