@@ -21,9 +21,17 @@ private:
     size_t factChunk {0};
     size_t dataChunk {0};
     size_t length {0};
+    int channels {0};
+#ifdef WF_AVFRAME
+    AVSampleFormat format {AV_SAMPLE_FMT_NONE};
+    bool planar {false};
+    int depth {0};
+    int stepPerSample {0};
+#endif
 
 public:
-    WavFile(std::string filename, int channels, int sampling_rate)
+    WavFile(std::string filename, int channelCount, int sampling_rate)
+        : channels(channelCount)
     {
         static_assert(std::is_arithmetic<SampleFormat>::value, "Sample type must be integral or floating point");
         os = std::ofstream(filename, std::ios_base::out | std::ios_base::binary);
@@ -58,6 +66,14 @@ public:
             os << "----";
         }
     }
+
+#ifdef WF_AVFRAME
+    WavFile(std::string filename, int channels, int sampling_rate, AVSampleFormat sampleFormat)
+        : WavFile(filename, channels, sampling_rate)
+    {
+        setFormat(sampleFormat);
+    }
+#endif
 
     ~WavFile()
     {
@@ -98,12 +114,10 @@ public:
 #ifdef WF_AVFRAME
     void write(AVFrame *frame)
     {
-        auto format = static_cast<AVSampleFormat>(frame->format);
-        int width = av_get_bytes_per_sample(format);
-        int planar = av_sample_fmt_is_planar(format);
-        int step = planar ? width : width * frame->channels;
+        if (format == AV_SAMPLE_FMT_NONE)
+            setFormat(static_cast<AVSampleFormat>(frame->format));
         for (int c = 0; c < frame->channels; ++c) {
-            int offset = planar ? 0 : width * c;
+            int offset = planar ? 0 : depth * c;
             for (int i = 0; i < frame->nb_samples; ++i) {
                 uint8_t *p = &frame->extended_data[planar ? c : 0][i + offset];
                 switch (format) {
@@ -134,6 +148,17 @@ public:
                 }
             }
         }
+    }
+#endif
+
+private:
+#ifdef WF_AVFRAME
+    void setFormat(AVSampleFormat sampleFormat)
+    {
+        format = sampleFormat;
+        planar = av_sample_fmt_is_planar(format);
+        depth = av_get_bytes_per_sample(format);
+        stepPerSample = planar ? depth : depth * channels;
     }
 #endif
 };

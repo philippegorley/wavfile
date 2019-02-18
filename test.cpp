@@ -69,7 +69,6 @@ void test_vector_vector(std::string filename, int channels, int rate)
 template<typename T>
 void test_frame(std::string filename, int channels, int rate, bool planar)
 {
-    auto wav = std::unique_ptr<wav::WavFile<T>>(new wav::WavFile<T>(filename, channels, rate));
     AVFrame *frame = av_frame_alloc();
     AVSampleFormat format;
     if (std::is_same<T, uint8_t>::value)
@@ -86,6 +85,7 @@ void test_frame(std::string filename, int channels, int rate, bool planar)
         format = AV_SAMPLE_FMT_DBL;
     if (planar)
         format = av_get_planar_sample_fmt(format);
+    auto wav = std::unique_ptr<wav::WavFile<T>>(new wav::WavFile<T>(filename, channels, rate, format));
     for (int i = 0; i < 50; ++i) {
         frame->format = format;
         frame->channels = channels;
